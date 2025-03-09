@@ -59,8 +59,41 @@ const BLEApp: React.FC = () => {
       await connected.discoverAllServicesAndCharacteristics();
       setConnectedDevice(connected);
       console.log("Connected to", connected.name);
+
+      // Subscribe to notifications for automatic updates
+      monitorCharacteristic(connected);
     } catch (error) {
       console.log("Connection error:", error);
+    }
+  };
+  const monitorCharacteristic = async (device: Device) => {
+    try {
+      const services = await device.services();
+      for (const service of services) {
+        const characteristics = await service.characteristics();
+        for (const char of characteristics) {
+          if (char.uuid.toLowerCase() === CHARACTERISTIC_UUID.toLowerCase()) {
+            console.log("Subscribing to notifications...");
+
+            char.monitor((error, characteristic) => {
+              if (error) {
+                console.log("Monitor error:", error);
+                return;
+              }
+
+              if (characteristic?.value) {
+                const decodedValue = decode(characteristic.value);
+                setStateValue(decodedValue); // Auto-update UI
+                console.log(`✅ Confirmation Received: ${decodedValue}`);
+              }
+            });
+            return;
+          }
+        }
+      }
+      console.log("Characteristic not found!");
+    } catch (error) {
+      console.log("Monitoring error:", error);
     }
   };
 
@@ -75,10 +108,12 @@ const BLEApp: React.FC = () => {
         const characteristics = await service.characteristics();
         for (const char of characteristics) {
           if (char.uuid.toLowerCase() === CHARACTERISTIC_UUID.toLowerCase()) {
-            const base64Data = btoa(value); // Correct way to Base64 encode in React Native
+            const base64Data = btoa(value);
 
             await char.writeWithResponse(base64Data);
             console.log(`Sent: ${value} (Encoded: ${base64Data})`);
+
+            // ✅ No need to manually read back, monitor will auto-update
             return;
           }
         }
