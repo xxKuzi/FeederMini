@@ -1,136 +1,105 @@
-import React from "react";
-import { useState } from "react";
-import { Button, Text, View } from "react-native";
-import { BleManager, Device, BleError, Characteristic } from "react-native-ble-plx";
-import styles from "../assets/styles/styles";
-import ParallaxScrollView from "./ParallaxScrollView";
-import { Base64 } from "js-base64";
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  Button,
+  FlatList,
+  PermissionsAndroid,
+  Platform,
+} from "react-native";
+import { BleManager, Device } from "react-native-ble-plx";
 
-export const bleManager = new BleManager();
-let showDevicesWithoutName = false;
-const DATA_SERVICE_UUID = "9800"; // * Get from the device manufacturer - 9800 for the BLE iOs Tester App "MyBLESim"
-const CHARACTERISTIC_UUID = "9801"; // * Get from the device manufacturer - 9801-9805 for the BLE iOs Tester App "MyBLESim"
+const manager = new BleManager();
 
-export default function MainPage() {
-  const [allDevices, setAllDevices] = useState<Device[]>([]);
+const BLEApp: React.FC = () => {
+  const [devices, setDevices] = useState<Device[]>([]);
   const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
-  const [dataReceived, setDataReceived] = useState<string>("...waiting.");
+  const MACBOOK_BLE_NAME = "kubka’s MacBook Pro"; // Change as per your MacBook setup
 
-  // Managers Central Mode - Scanning for devices
-  const isDuplicteDevice = (devices: Device[], nextDevice: Device) =>
-    devices.findIndex((device) => nextDevice.id === device.id) > -1;
-  function scanForPeripherals() {
-    console.log("Scanning for peripherals...");
-    bleManager.startDeviceScan(null, null, (error, device) => {
+  useEffect((): any => {
+    requestPermissions();
+    return () => manager.destroy();
+  }, []);
+
+  const requestPermissions = async (): Promise<void> => {
+    if (Platform.OS === "android") {
+      await PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+      ]);
+    }
+  };
+
+  const scanForDevices = (): void => {
+    setDevices([]);
+    manager.startDeviceScan(null, null, (error, device) => {
       if (error) {
-        console.error(error);
+        console.log("Scan error:", error);
+        return;
       }
-      if (device) {
-        setAllDevices((prevState: Device[]) => {
-          if (!isDuplicteDevice(prevState, device)) {
-            return [...prevState, device];
+
+      if (device && device.name === MACBOOK_BLE_NAME) {
+        setDevices((prevDevices) => {
+          if (!prevDevices.some((d) => d.id === device.id)) {
+            return [...prevDevices, device];
           }
-          return prevState;
+          return prevDevices;
         });
       }
     });
-  }
-
-  // Decoding the data received from the device and defining the callback
-  async function startStreamingData(device: Device) {
-    if (device) {
-      device.monitorCharacteristicForService(DATA_SERVICE_UUID, CHARACTERISTIC_UUID, onDataUpdate);
-    } else {
-      console.log("No Device Connected");
-    }
-  }
-
-  // Called when data is received on the connected device
-  const onDataUpdate = (error: BleError | null, characteristic: Characteristic | null) => {
-    if (error) {
-      console.error(error);
-      return;
-    } else if (!characteristic?.value) {
-      console.warn("No Data was received!");
-      return;
-    }
-
-    // * IMPORTANT: The BLE iOs App "MyBLESim" is taking the input value, converting into asc2, and sending the base64 encoded value
-    // * So, to get 4, I should insert 52 in the app, and it will send the base64 encoded value of 4
-    // * To get 7, I should insert 55 in the app, and it will send the base64 encoded value of 7
-    // * and so on...
-
-    const dataInput = Base64.decode(characteristic.value);
-    setDataReceived(dataInput);
+    setTimeout(() => manager.stopDeviceScan(), 5000); // Stop scan after 5 sec
   };
 
-  // Managers Central Mode - Connecting to a device
-  async function connectToDevice(device: Device) {
+  const connectToDevice = async (device: Device): Promise<void> => {
     try {
-      const deviceConnection = await bleManager.connectToDevice(device.id);
-      setConnectedDevice(deviceConnection);
-      await deviceConnection.discoverAllServicesAndCharacteristics();
-      bleManager.stopDeviceScan();
-      startStreamingData(deviceConnection);
-    } catch (e) {
-      console.error("FAILED TO CONNECT", e);
+      const connected = await manager.connectToDevice(device.id);
+      await connected.discoverAllServicesAndCharacteristics();
+      setConnectedDevice(connected);
+      console.log("Connected to", connected.name);
+    } catch (error) {
+      console.log("Connection error:", error);
     }
-  }
+  };
+
+  const readData = async (): Promise<void> => {
+    if (!connectedDevice) return;
+    try {
+      const services = await connectedDevice.services();
+      for (const service of services) {
+        const characteristics = await service.characteristics();
+        for (const char of characteristics) {
+          if (char.isReadable) {
+            const data = await char.read();
+            console.log("Received data:", data.value);
+          }
+        }
+      }
+    } catch (error) {
+      console.log("Read error:", error);
+    }
+  };
 
   return (
-    <>
-      <ParallaxScrollView>
-        <Text style={styles.textTitle}>Central Mode</Text>
-        <Text style={styles.textTitle}>Listing Devices</Text>
-        <View style={styles.containerButtons}>
-          <Button title="Start" onPress={scanForPeripherals} />
-          {/* TODO: Implement this button
-        <Button
-          title="Stop"
-          onPress={() => {
-            console.log("Stop Scanning");
-            bleManager.stopDeviceScan;
-          }}
-        /> */}
-          <Button title="Clear" onPress={() => setAllDevices([])}></Button>
+    <View style={{ padding: 20 }}>
+      <Button title="Scan for Devices" onPress={scanForDevices} />
+      <FlatList
+        data={devices}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
           <Button
-            title={showDevicesWithoutName ? "Hide Nameless" : "Show Nameless"}
-            onPress={() => {
-              showDevicesWithoutName = !showDevicesWithoutName;
-              setAllDevices([...allDevices]);
-              // !DEBUG: console.warn("Showing Devices Nameless: ", showDevicesWithoutName);
-            }}></Button>
-        </View>
-        <View style={styles.containerDevices}>
-          {allDevices.map((device) => {
-            if (showDevicesWithoutName || device.name) {
-              return (
-                <React.Fragment key={device.id}>
-                  <Text>
-                    📲 - {device.id} - {device.name}
-                  </Text>
-                  <Button
-                    key={`button${device.id}`}
-                    title="Connect"
-                    onPress={() => connectToDevice(device)}
-                  />
-                </React.Fragment>
-              );
-            }
-            return null;
-          })}
-        </View>
-      </ParallaxScrollView>
+            title={`Connect to ${item.name}`}
+            onPress={() => connectToDevice(item)}
+          />
+        )}
+      />
       {connectedDevice && (
-        <View style={styles.containerConnectedDevice}>
-          <Text style={styles.textTitle}>Connected to Device: </Text>
-          <View style={styles.containerDevices}>
-            <Text>ID: {connectedDevice.id}</Text>
-            <Text>Name: {connectedDevice.name}</Text>
-            <Text>Data Received: {dataReceived} </Text>
-          </View>
-        </View>
+        <>
+          <Text>Connected to {connectedDevice.name}</Text>
+          <Button title="Read Data" onPress={readData} />
+        </>
       )}
-    </>
+    </View>
   );
-}
+};
+
+export default BLEApp;
