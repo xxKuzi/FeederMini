@@ -6,6 +6,7 @@ import {
   FlatList,
   PermissionsAndroid,
   Platform,
+  Permission,
 } from "react-native";
 import { BleManager, Device } from "react-native-ble-plx";
 import { encode as btoa, decode } from "base-64"; // Import Base64 encoding
@@ -24,15 +25,47 @@ const BLEApp: React.FC = () => {
     return () => manager.destroy();
   }, []);
 
+  const isDefined = (value: unknown): value is string =>
+    typeof value === "string" && value.length > 0;
+
   const requestPermissions = async (): Promise<void> => {
-    if (Platform.OS === "android") {
-      await PermissionsAndroid.requestMultiple([
+    if (Platform.OS !== "android" || Platform.Version < 23) return;
+
+    let permissions: (string | undefined)[] = [];
+
+    if (Platform.Version >= 31) {
+      permissions = [
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-      ]);
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      ];
+    } else {
+      permissions = [
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH,
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_ADMIN,
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      ];
+    }
+
+    // Filter out any undefined or null permissions to avoid "permission is null" crash
+    const safePermissions: Permission[] = permissions.filter(
+      (p): p is Permission => typeof p === "string"
+    );
+
+    try {
+      const result = await PermissionsAndroid.requestMultiple(safePermissions);
+
+      const allGranted = Object.values(result).every(
+        (status) => status === PermissionsAndroid.RESULTS.GRANTED
+      );
+
+      if (!allGranted) {
+        console.warn("Some permissions were denied.");
+      }
+    } catch (err) {
+      console.error("Permission request error:", err);
     }
   };
-
   const scanForDevices = (): void => {
     setDevices([]);
     setConnectedDevice(null);
