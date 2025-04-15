@@ -69,21 +69,36 @@ const BLEApp: React.FC = () => {
   const scanForDevices = (): void => {
     setDevices([]);
     setConnectedDevice(null);
+
     manager.startDeviceScan(null, null, (error, device) => {
       if (error) {
         console.log("Scan error:", error);
         return;
       }
-      if (device && device.name === MACBOOK_BLE_NAME) {
+
+      if (device) {
+        console.log("Found device:", {
+          id: device.id,
+          name: device.name,
+          localName: device.localName,
+          rssi: device.rssi,
+        });
+
         setDevices((prevDevices) => {
-          if (!prevDevices.some((d) => d.id === device.id)) {
+          const exists = prevDevices.some((d) => d.id === device.id);
+          if (!exists) {
             return [...prevDevices, device];
           }
           return prevDevices;
         });
       }
     });
-    setTimeout(() => manager.stopDeviceScan(), 5000);
+
+    // Stop scan after 5 seconds
+    setTimeout(() => {
+      manager.stopDeviceScan();
+      console.log("Scan stopped.");
+    }, 5000);
   };
 
   const connectToDevice = async (device: Device): Promise<void> => {
@@ -197,6 +212,15 @@ const BLEApp: React.FC = () => {
           />
         )}
       />
+      {/* <FlatList
+        data={[
+          { id: 1, name: "macbook" },
+          { id: 2, name: "iphone" },
+        ]}
+        keyExtractor={(item: any) => item.id}
+        renderItem={({ item }) => <Button title={`Connect to ${item.name}`} />}
+      /> */}
+
       {connectedDevice && (
         <>
           <Text>Connected to {connectedDevice.name}</Text>
