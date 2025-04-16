@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { BLEProvider } from "./BLEContext";
+import { BLEProvider } from "../assets/BLEContext";
 
 export default function Layout() {
   return (

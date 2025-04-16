@@ -1,5 +1,5 @@
 import { View, Button, FlatList, Text } from "react-native";
-import { useBLE } from "./BLEContext";
+import { useBLE } from "../assets/BLEContext";
 
 export default function Connection() {
   const {
