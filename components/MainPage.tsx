@@ -76,7 +76,7 @@ const BLEApp: React.FC = () => {
         return;
       }
 
-      if (device) {
+      if (device && isDefined(device.name)) {
         console.log("Found device:", {
           id: device.id,
           name: device.name,
