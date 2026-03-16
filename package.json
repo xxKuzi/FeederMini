@@ -54,7 +54,11 @@
     "typescript": "~5.3.3"
   },
   "overrides": {
-    "glob": "^10.5.0"
+    "glob": "^10.5.0",
+    "@tootallnate/once": "^3.0.1",
+    "ajv": "^8.18.0",
+    "send": "^0.19.0",
+    "tar": "^7.5.11"
   },
   "private": true
 }
